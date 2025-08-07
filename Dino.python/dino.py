@@ -18,10 +18,9 @@ clock = pygame.time.Clock()
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 BG_COLOR = WHITE
-
 # Resource loader
 def load_image(name, size=None):
-    path = os.path.join('resources', name)
+    path = os.path.join(r'Dino.python\resources', name)
     image = pygame.image.load(path).convert()
     image.set_colorkey(BLACK)
     if size:
@@ -29,7 +28,7 @@ def load_image(name, size=None):
     return image
 
 def load_sprite_sheet(name, cols, rows, size=None):
-    path = os.path.join('resources', name)
+    path = os.path.join(r'Dino.python\resources', name)
     sheet = pygame.image.load(path).convert()
     sheet.set_colorkey(BLACK)
     sprite_width = sheet.get_width() // cols
@@ -121,58 +120,95 @@ class Cloud(pygame.sprite.Sprite):
 
 # Main game loop
 def main():
+    font = pygame.font.SysFont(None, 28)
+    running = True
+    game_over = False
+    score = 0
+    spawn_timer = 0
+
+    # Initialize game objects
     dino = Dino()
     ground = Ground()
     cacti = pygame.sprite.Group()
     clouds = pygame.sprite.Group()
     all_sprites = pygame.sprite.Group(dino)
 
-    score = 0
-    font = pygame.font.SysFont(None, 28)
+    def reset_game():
+        nonlocal dino, ground, cacti, clouds, all_sprites, score, spawn_timer
+        dino = Dino()
+        ground = Ground()
+        cacti = pygame.sprite.Group()
+        clouds = pygame.sprite.Group()
+        all_sprites = pygame.sprite.Group(dino)
+        score = 0
+        spawn_timer = 0
 
-    running = True
-    spawn_timer = 0
+    def draw_restart_button():
+        button_rect = pygame.Rect(WIDTH // 2 - 60, HEIGHT // 2 + 20, 120, 40)
+        pygame.draw.rect(screen, BLACK, button_rect, border_radius=5)
+        text = font.render("Restart", True, WHITE)
+        text_rect = text.get_rect(center=button_rect.center)
+        screen.blit(text, text_rect)
+        return button_rect
 
     while running:
         clock.tick(FPS)
+        screen.fill(BG_COLOR)
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-                dino.jump()
 
-        all_sprites.update()
-        cacti.update()
-        clouds.update()
-        ground.update()
+            if not game_over:
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+                    dino.jump()
+            else:
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if restart_button.collidepoint(event.pos):
+                        reset_game()
+                        game_over = False
 
-        # Spawn cactus
-        spawn_timer += 1
-        if spawn_timer > 90:
-            cactus = Cactus()
-            cacti.add(cactus)
-            all_sprites.add(cactus)
-            spawn_timer = 0
+        if not game_over:
+            # Update game elements
+            all_sprites.update()
+            cacti.update()
+            clouds.update()
+            ground.update()
 
-        # Random cloud
-        if random.randint(1, 120) == 1:
-            cloud = Cloud()
-            clouds.add(cloud)
+            # Spawn cactus
+            spawn_timer += 1
+            if spawn_timer > 90:
+                cactus = Cactus()
+                cacti.add(cactus)
+                all_sprites.add(cactus)
+                spawn_timer = 0
 
-        # Collision
-        if pygame.sprite.spritecollideany(dino, cacti):
-            running = False
+            # Random cloud
+            if random.randint(1, 120) == 1:
+                cloud = Cloud()
+                clouds.add(cloud)
 
-        # Draw
-        screen.fill(BG_COLOR)
+            # Collision
+            if pygame.sprite.spritecollideany(dino, cacti):
+                game_over = True
+
+            # Score
+            score += 0.1
+
+        # Drawing
         clouds.draw(screen)
         ground.draw(screen)
         all_sprites.draw(screen)
 
-        # Score
-        score += 0.1
+        # Draw score
         score_surface = font.render(f"Score: {int(score)}", True, BLACK)
         screen.blit(score_surface, (10, 10))
+
+        # If game over, show Game Over text and Restart button
+        if game_over:
+            over_text = font.render("Game Over", True, BLACK)
+            screen.blit(over_text, (WIDTH // 2 - over_text.get_width() // 2, HEIGHT // 2 - 30))
+            restart_button = draw_restart_button()
 
         pygame.display.flip()
 
