@@ -2,10 +2,8 @@ import pygame
 import os
 import random
 
-# Initialize Pygame
 pygame.init()
 
-# Screen dimensions and settings
 WIDTH, HEIGHT = 600, 300
 FPS = 60
 GRAVITY = 0.5
@@ -14,24 +12,22 @@ screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Dino Run - Clean Version")
 clock = pygame.time.Clock()
 
-# Colors
+
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 BG_COLOR = WHITE
 
-# Resource loader
 def load_image(name, size=None):
     path = os.path.join('resources', name)
-    image = pygame.image.load(path).convert()
-    image.set_colorkey(BLACK)
+    image = pygame.image.load(path).convert() 
     if size:
         image = pygame.transform.scale(image, size)
     return image
 
+
 def load_sprite_sheet(name, cols, rows, size=None):
     path = os.path.join('resources', name)
     sheet = pygame.image.load(path).convert()
-    sheet.set_colorkey(BLACK)
     sprite_width = sheet.get_width() // cols
     sprite_height = sheet.get_height() // rows
     sprites = []
@@ -40,13 +36,12 @@ def load_sprite_sheet(name, cols, rows, size=None):
             rect = pygame.Rect(x * sprite_width, y * sprite_height, sprite_width, sprite_height)
             image = pygame.Surface(rect.size).convert()
             image.blit(sheet, (0, 0), rect)
-            image.set_colorkey(BLACK)
             if size:
                 image = pygame.transform.scale(image, size)
             sprites.append(image)
     return sprites
 
-# Dino class
+
 class Dino(pygame.sprite.Sprite):
     def __init__(self):
         super().__init__()
@@ -71,7 +66,6 @@ class Dino(pygame.sprite.Sprite):
             self.is_jumping = True
             self.velocity = -12
 
-# Cactus obstacle
 class Cactus(pygame.sprite.Sprite):
     def __init__(self):
         super().__init__()
@@ -84,7 +78,6 @@ class Cactus(pygame.sprite.Sprite):
         if self.rect.right < 0:
             self.kill()
 
-# Ground that loops
 class Ground(pygame.sprite.Sprite):
     def __init__(self):
         super().__init__()
@@ -106,7 +99,6 @@ class Ground(pygame.sprite.Sprite):
         surface.blit(self.image, (self.x1, self.rect.y))
         surface.blit(self.image, (self.x2, self.rect.y))
 
-# Cloud for background
 class Cloud(pygame.sprite.Sprite):
     def __init__(self):
         super().__init__()
@@ -119,7 +111,28 @@ class Cloud(pygame.sprite.Sprite):
         if self.rect.right < 0:
             self.kill()
 
-# Main game loop
+def load_high_score():
+    try:
+        with open("highscore.txt", "r") as f:
+            return int(f.read())
+    except:
+        return 0
+
+def save_high_score(score):
+    with open("highscore.txt", "w") as f:
+        f.write(str(int(score)))
+
+
+def draw_text(text, font, color, surface, x, y):
+    text_obj = font.render(text, True, color)
+    text_rect = text_obj.get_rect(center=(x, y))
+    surface.blit(text_obj, text_rect)
+
+def draw_text(text, font, color, surface, x, y):
+    text_obj = font.render(text, True, color)
+    text_rect = text_obj.get_rect(center=(x, y))
+    surface.blit(text_obj, text_rect)
+
 def main():
     dino = Dino()
     ground = Ground()
@@ -128,55 +141,106 @@ def main():
     all_sprites = pygame.sprite.Group(dino)
 
     score = 0
-    font = pygame.font.SysFont(None, 28)
-
-    running = True
+    high_score = load_high_score()
     spawn_timer = 0
+    font = pygame.font.SysFont("Arial", 28)
+
+    game_state = "start"  
+    running = True
 
     while running:
         clock.tick(FPS)
+        screen.fill(BG_COLOR)
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-                dino.jump()
 
-        all_sprites.update()
-        cacti.update()
-        clouds.update()
-        ground.update()
+            if game_state == "start":
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+                    game_state = "playing"
 
-        # Spawn cactus
-        spawn_timer += 1
-        if spawn_timer > 90:
-            cactus = Cactus()
-            cacti.add(cactus)
-            all_sprites.add(cactus)
-            spawn_timer = 0
+            elif game_state == "playing":
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_SPACE:
+                        dino.jump()
+                    elif event.key == pygame.K_p:
+                        game_state = "paused"
 
-        # Random cloud
-        if random.randint(1, 120) == 1:
-            cloud = Cloud()
-            clouds.add(cloud)
+            elif game_state == "paused":
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_p:
+                    game_state = "playing"
 
-        # Collision
-        if pygame.sprite.spritecollideany(dino, cacti):
-            running = False
+            elif game_state == "game_over":
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
+                    dino = Dino()
+                    ground = Ground()
+                    cacti.empty()
+                    clouds.empty()
+                    all_sprites = pygame.sprite.Group(dino)
+                    score = 0
+                    spawn_timer = 0
+                    game_state = "start"
 
-        # Draw
-        screen.fill(BG_COLOR)
-        clouds.draw(screen)
-        ground.draw(screen)
-        all_sprites.draw(screen)
+        if game_state == "start":
+            draw_text("Dino Run", font, BLACK, screen, WIDTH // 2, HEIGHT // 3)
+            draw_text("Press SPACE to Start", font, BLACK, screen, WIDTH // 2, HEIGHT // 2)
+            draw_text(f"High Score: {high_score}", font, BLACK, screen, WIDTH // 2, HEIGHT // 1.5)
 
-        # Score
-        score += 0.1
-        score_surface = font.render(f"Score: {int(score)}", True, BLACK)
-        screen.blit(score_surface, (10, 10))
+        elif game_state == "playing":
+            all_sprites.update()
+            cacti.update()
+            clouds.update()
+            ground.update()
+
+            
+            spawn_timer += 1
+            if spawn_timer > 90:
+                cactus = Cactus()
+                cacti.add(cactus)
+                all_sprites.add(cactus)
+                spawn_timer = 0
+
+            
+            if random.randint(1, 120) == 1:
+                cloud = Cloud()
+                clouds.add(cloud)
+
+            
+            if pygame.sprite.spritecollideany(dino, cacti):
+                game_state = "game_over"
+                if score > high_score:
+                    high_score = score
+                    save_high_score(high_score)
+
+            # Drawing
+            clouds.draw(screen)
+            ground.draw(screen)
+            all_sprites.draw(screen)
+
+            # 
+            score += 0.1
+            score_surface = font.render(f"Score: {int(score)}", True, BLACK)
+            screen.blit(score_surface, (10, 10))
+
+        elif game_state == "paused":
+            draw_text("Game Paused", font, BLACK, screen, WIDTH // 2, HEIGHT // 3)
+            draw_text("Press P to Resume", font, BLACK, screen, WIDTH // 2, HEIGHT // 2)
+
+        elif game_state == "game_over":
+            clouds.draw(screen)
+            ground.draw(screen)
+            all_sprites.draw(screen)
+
+            draw_text("Game Over", font, BLACK, screen, WIDTH // 2, HEIGHT // 3)
+            draw_text(f"Score: {int(score)}", font, BLACK, screen, WIDTH // 2, HEIGHT // 2)
+            draw_text(f"High Score: {int(high_score)}", font, BLACK, screen, WIDTH // 2, HEIGHT // 1.7)
+            draw_text("Press R to Restart", font, BLACK, screen, WIDTH // 2, HEIGHT // 1.4)
 
         pygame.display.flip()
 
     pygame.quit()
+
 
 if __name__ == "__main__":
     main()

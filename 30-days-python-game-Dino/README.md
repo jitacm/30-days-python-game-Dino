@@ -5,7 +5,7 @@ A simple dinosaur running game made with **Python** and **Pygame**.
 
 ---
 
-## How to Play
+## How to Pla
 
 - Press `SPACE` to jump.
 - Avoid the cacti.
