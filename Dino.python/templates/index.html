@@ -1,13 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dino Run</title>
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+
+  <style>
     body {
       font-family: 'Press Start 2P', monospace;
       background: linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%);
@@ -20,8 +22,10 @@
       background-color: #fff;
     }
 
-    #startScreen, #gameOver {
+    #startScreen,
+    #gameOver {
       backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
     }
 
     .btn {
@@ -35,182 +39,244 @@
     }
   </style>
 </head>
+
 <body class="flex flex-col items-center justify-center min-h-screen text-gray-800 relative">
 
   <h1 class="text-4xl md:text-5xl mb-4 text-green-700 drop-shadow-lg animate-bounce z-0">🦖 Dino Run</h1>
   <canvas id="gameCanvas" class="shadow-2xl border-8 border-green-500"></canvas>
 
   <!-- Start Screen -->
-  <div id="startScreen" class="fixed inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center text-center z-10">
+  <div id="startScreen"
+    class="fixed inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center text-center z-10">
     <h2 class="text-3xl md:text-4xl text-white mb-6">Welcome to Dino Run</h2>
     <p class="text-white mb-4">Press SPACE or Tap to Jump</p>
-    <button onclick="startGame()" class="btn bg-green-500 text-white hover:bg-green-600 text-lg">🎮 Start Game</button>
+    <button id="startBtn" class="btn bg-green-500 text-white hover:bg-green-600 text-lg">🎮 Start Game</button>
   </div>
 
   <!-- Game Over Screen -->
   <div id="gameOver" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-10">
     <div class="bg-white p-6 md:p-8 rounded-lg shadow-xl text-center">
       <h2 class="text-2xl md:text-3xl text-red-600 font-bold mb-4">💥 Game Over!</h2>
-      <p class="text-lg md:text-xl text-gray-700 mb-4">Final Score: <span id="finalScore" class="font-bold text-black"></span></p>
-      <button onclick="restartGame()" class="btn bg-green-600 text-white hover:bg-green-700 text-lg">🔁 Restart</button>
+      <p class="text-lg md:text-xl text-gray-700 mb-4">Final Score: <span id="finalScore"
+          class="font-bold text-black"></span></p>
+      <button id="restartBtn" class="btn bg-green-600 text-white hover:bg-green-700 text-lg">🔁 Restart</button>
     </div>
   </div>
 
-<script>
-  const canvas = document.getElementById("gameCanvas");
-  const ctx = canvas.getContext("2d");
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
 
-  // Fixed game size for consistent play
-  const GAME_WIDTH = 800;
-  const GAME_HEIGHT = 400;
-  canvas.width = GAME_WIDTH;
-  canvas.height = GAME_HEIGHT;
+    const GAME_WIDTH = 800;
+    const GAME_HEIGHT = 400;
+    canvas.width = GAME_WIDTH;
+    canvas.height = GAME_HEIGHT;
 
-  const GRAVITY = 0.6;
-  const GROUND_HEIGHT = 50;
+    const GRAVITY = 0.6;
+    const GROUND_HEIGHT = 50;
 
-  let dino = { x: 50, y: GAME_HEIGHT - GROUND_HEIGHT - 47, width: 44, height: 47, velocityY: 0, isJumping: false, frame: 0 };
-  let cacti = [];
-  let clouds = [];
-  let groundX = 0;
-  let spawnTimer = 0;
-  let score = 0;
-  let isRunning = false;
+    let dino = {
+      x: 50,
+      y: GAME_HEIGHT - GROUND_HEIGHT - 47,
+      width: 44,
+      height: 47,
+      velocityY: 0,
+      isJumping: false,
+      frame: 0
+    };
+    let cacti = [];
+    let clouds = [];
+    let groundX = 0;
+    let spawnTimer = 0;
+    let score = 0;
+    let isRunning = false;
+    let animationId = null;
 
-  const images = {};
-  let assetsLoaded = false;
+    const images = {};
+    let assetsLoaded = false;
+    let dinoFrameWidth = 44; // will be updated after loading
+    let dinoFrameHeight = 47;
+    let dinoFrameCount = 1;
 
-  function loadImage(src) {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.src = src;
-      img.onload = () => resolve(img);
-    });
-  }
-
-  async function loadAssets() {
-    images.dino = await loadImage("/static/assets/dino-sprite.png"); // Correct path to sprite sheet
-    images.cactus = await loadImage("/static/assets/cactus-small.png");
-    images.cloud = await loadImage("/static/assets/cloud.png");
-    images.ground = await loadImage("/static/assets/ground.png");
-    assetsLoaded = true;
-  }
-
-  function drawDino() {
-    const spriteWidth = 44;
-    const spriteHeight = 47;
-    const frameX = Math.floor(dino.frame) * spriteWidth;
-    ctx.drawImage(images.dino, frameX, 0, spriteWidth, spriteHeight, dino.x, dino.y, dino.width, dino.height);
-  }
-
-  function gameLoop() {
-    if (!isRunning) return;
-
-    ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-
-    // Jump physics
-    dino.velocityY += GRAVITY;
-    dino.y += dino.velocityY;
-    if (dino.y >= GAME_HEIGHT - GROUND_HEIGHT - dino.height) {
-      dino.y = GAME_HEIGHT - GROUND_HEIGHT - dino.height;
-      dino.isJumping = false;
-      dino.velocityY = 0;
-    }
-
-    // Animate Dino
-    if (!dino.isJumping) {
-      dino.frame = (dino.frame + 0.15) % 2;
-    } else {
-      dino.frame = 0;
-    }
-
-    // Clouds
-    if (Math.random() < 0.01) {
-      clouds.push({ x: GAME_WIDTH, y: Math.random() * GAME_HEIGHT / 2, speed: 0.5 + Math.random() });
-    }
-    clouds.forEach(cloud => cloud.x -= cloud.speed);
-    clouds = clouds.filter(cloud => cloud.x + 90 > 0);
-    clouds.forEach(cloud => ctx.drawImage(images.cloud, cloud.x, cloud.y, 90, 30));
-
-    // Ground
-    groundX = (groundX - 5) % GAME_WIDTH;
-    ctx.drawImage(images.ground, groundX, GAME_HEIGHT - GROUND_HEIGHT, GAME_WIDTH, GROUND_HEIGHT);
-    ctx.drawImage(images.ground, groundX + GAME_WIDTH, GAME_HEIGHT - GROUND_HEIGHT, GAME_WIDTH, GROUND_HEIGHT);
-
-    // Cactus
-    spawnTimer++;
-    if (spawnTimer > 90) {
-      cacti.push({
-        x: GAME_WIDTH,
-        y: GAME_HEIGHT - GROUND_HEIGHT - 40,
-        width: 30,
-        height: 40
+    function loadImage(src) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.src = src;
+        img.onload = () => {
+          console.log(`✅ Loaded: ${src} (${img.width}x${img.height})`);
+          resolve(img);
+        };
+        img.onerror = () => {
+          console.error(`❌ Failed to load image: ${src}`);
+          reject(`Failed to load image: ${src}`);
+        };
       });
-      spawnTimer = 0;
     }
-    cacti.forEach(cactus => cactus.x -= 5);
-    cacti = cacti.filter(cactus => cactus.x + cactus.width > 0);
-    cacti.forEach(cactus => ctx.drawImage(images.cactus, cactus.x, cactus.y, cactus.width, cactus.height));
 
-    // Collision
-    cacti.forEach(cactus => {
-      if (
-        dino.x < cactus.x + cactus.width &&
-        dino.x + dino.width > cactus.x &&
-        dino.y < cactus.y + cactus.height &&
-        dino.y + dino.height > cactus.y
-      ) {
-        isRunning = false;
-        document.getElementById("gameOver").classList.remove("hidden");
-        document.getElementById("finalScore").textContent = Math.floor(score);
+    async function loadAssets() {
+      try {
+        images.dino = await loadImage("static/assets/Adobe Express - file.png");
+        images.cactus = await loadImage("static/assets/cactus-small.png");
+        images.cloud = await loadImage("static/assets/cloud.png");
+        images.ground = await loadImage("static/assets/ground.png");
+
+        // auto-detect dino frame size
+        dinoFrameHeight = images.dino.height;
+        if (images.dino.width > dinoFrameHeight) {
+          // assume horizontal sprite sheet
+          dinoFrameCount = 2; // adjust if you have more
+          dinoFrameWidth = images.dino.width / dinoFrameCount;
+        } else {
+          dinoFrameWidth = images.dino.width;
+          dinoFrameCount = 1;
+        }
+
+        dino.width = dinoFrameWidth;
+        dino.height = dinoFrameHeight;
+
+        console.log(`🎨 Dino frames: ${dinoFrameCount}, size: ${dinoFrameWidth}x${dinoFrameHeight}`);
+        assetsLoaded = true;
+      } catch (err) {
+        console.error(err);
       }
+    }
+
+    function drawDino() {
+      const frameX = Math.floor(dino.frame) * dinoFrameWidth;
+      ctx.drawImage(
+        images.dino,
+        frameX, 0,
+        dinoFrameWidth, dinoFrameHeight,
+        dino.x, dino.y,
+        dino.width, dino.height
+      );
+    }
+
+    function gameLoop() {
+      if (!isRunning) return;
+      ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+      // Jump physics
+      dino.velocityY += GRAVITY;
+      dino.y += dino.velocityY;
+      if (dino.y >= GAME_HEIGHT - GROUND_HEIGHT - dino.height) {
+        dino.y = GAME_HEIGHT - GROUND_HEIGHT - dino.height;
+        dino.isJumping = false;
+        dino.velocityY = 0;
+      }
+
+      // Dino animation
+      if (!dino.isJumping && dinoFrameCount > 1) {
+        dino.frame = (dino.frame + 0.15) % dinoFrameCount;
+      } else {
+        dino.frame = 0;
+      }
+
+      // Clouds
+      if (Math.random() < 0.01) {
+        clouds.push({ x: GAME_WIDTH, y: Math.random() * GAME_HEIGHT / 2, speed: 0.5 + Math.random() });
+      }
+      clouds.forEach(cloud => cloud.x -= cloud.speed);
+      clouds = clouds.filter(cloud => cloud.x + 90 > 0);
+      clouds.forEach(cloud => ctx.drawImage(images.cloud, cloud.x, cloud.y, 90, 30));
+
+      // Define a baseline for the ground (the Y position where things stand)
+      const groundY = GAME_HEIGHT - GROUND_HEIGHT;
+
+      // Ground
+      groundX = (groundX - 5 + GAME_WIDTH) % GAME_WIDTH;
+      const groundOffset = 30; // adjust this number until it looks right
+
+ctx.drawImage(images.ground, groundX, GAME_HEIGHT - GROUND_HEIGHT - groundOffset, GAME_WIDTH, GROUND_HEIGHT);
+ctx.drawImage(images.ground, groundX - GAME_WIDTH, GAME_HEIGHT - GROUND_HEIGHT - groundOffset, GAME_WIDTH, GROUND_HEIGHT);
+
+
+      // Cactus
+      spawnTimer++;
+      if (spawnTimer > 90) {
+        cacti.push({
+          x: GAME_WIDTH,
+          y: groundY - 40, // cactus stands directly on ground
+          width: 30,
+          height: 40
+        });
+        spawnTimer = 0;
+      }
+      cacti.forEach(cactus => cactus.x -= 5);
+      cacti = cacti.filter(cactus => cactus.x + cactus.width > 0);
+      cacti.forEach(cactus => ctx.drawImage(images.cactus, cactus.x, cactus.y, cactus.width, cactus.height));
+
+      // Collision detection stays the same
+
+
+      // Collision detection
+      cacti.forEach(cactus => {
+        if (
+          dino.x < cactus.x + cactus.width &&
+          dino.x + dino.width > cactus.x &&
+          dino.y < cactus.y + cactus.height &&
+          dino.y + dino.height > cactus.y
+        ) {
+          isRunning = false;
+          document.getElementById("gameOver").classList.remove("hidden");
+          document.getElementById("finalScore").textContent = Math.floor(score);
+        }
+      });
+
+      drawDino();
+
+      // Score
+      score += 0.1;
+      ctx.fillStyle = "#222";
+      ctx.font = "14px 'Press Start 2P'";
+      ctx.fillText("SCORE: " + Math.floor(score), 10, 25);
+
+      animationId = requestAnimationFrame(gameLoop);
+    }
+
+    async function startGame() {
+      if (!assetsLoaded) {
+        await loadAssets();
+      }
+      document.getElementById("startScreen")?.classList.add("hidden");
+      document.getElementById("gameOver")?.classList.add("hidden");
+      isRunning = true;
+      score = 0;
+      dino.y = GAME_HEIGHT - GROUND_HEIGHT - dino.height;
+      dino.velocityY = 0;
+      cacti = [];
+      clouds = [];
+      spawnTimer = 0;
+      cancelAnimationFrame(animationId);
+      gameLoop();
+    }
+
+    function restartGame() {
+      startGame();
+    }
+
+    function jump() {
+      if (!dino.isJumping && isRunning) {
+        dino.isJumping = true;
+        dino.velocityY = -12;
+      }
+    }
+
+    // Controls
+    window.addEventListener("keydown", e => {
+      if (e.code === "Space") jump();
     });
+    window.addEventListener("touchstart", jump);
 
-    drawDino();
+    // Buttons
+    document.getElementById("startBtn")?.addEventListener("click", startGame);
+    document.getElementById("restartBtn")?.addEventListener("click", restartGame);
 
-    // Score
-    score += 0.1;
-    ctx.fillStyle = "#222";
-    ctx.font = "14px 'Press Start 2P'";
-    ctx.fillText("SCORE: " + Math.floor(score), 10, 25);
+    // Preload
+    loadAssets();
+  </script>
 
-    requestAnimationFrame(gameLoop);
-  }
 
-  async function startGame() {
-    if (!assetsLoaded) {
-      await loadAssets();
-    }
-    document.getElementById("startScreen").classList.add("hidden");
-    isRunning = true;
-    score = 0;
-    dino.y = GAME_HEIGHT - GROUND_HEIGHT - dino.height;
-    dino.velocityY = 0;
-    cacti = [];
-    clouds = [];
-    spawnTimer = 0;
-    gameLoop();
-  }
-
-  function restartGame() {
-    document.getElementById("gameOver").classList.add("hidden");
-    startGame();
-  }
-
-  function jump() {
-    if (!dino.isJumping && isRunning) {
-      dino.isJumping = true;
-      dino.velocityY = -12;
-    }
-  }
-
-  window.addEventListener("keydown", (e) => {
-    if (e.code === "Space") jump();
-  });
-
-  window.addEventListener("touchstart", jump);
-
-  loadAssets();
-</script>
 </body>
+
 </html>
