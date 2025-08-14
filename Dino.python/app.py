@@ -1,8 +1,13 @@
+
 import os
 import json
 from flask import Flask, render_template, request, jsonify
 
+
+# This line initializes your Flask application and fixes the error
 app = Flask(__name__)
+app.secret_key = "dino_run_secret"
+
 
 SCORE_FILE = os.path.join(os.path.dirname(__file__), "score.json")
 
@@ -24,8 +29,90 @@ def write_score(new_score):
         json.dump({"highScore": new_score}, f)
 
 @app.route('/')
+
+
 def index():
-    return render_template('index.html')
+    if "username" not in session:
+        return redirect(url_for("login"))
+    
+    highscores_data = load_highscores()["highscores"]
+    valid_scores = [score for score in highscores_data if isinstance(score, dict) and "score" in score]
+    highscores_data = sorted(valid_scores, key=lambda x: x["score"], reverse=True)[:5]
+    
+    return render_template(
+        "index.html",
+        username=session["username"],
+        highscores=highscores_data
+    )
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        username = request.form["username"]
+        password = request.form["password"]
+        users = load_users()
+        if username in users and users[username]["password"] == password:
+            session["username"] = username
+            return redirect(url_for("index"))
+        else:
+            return render_template("login.html", error="Invalid username or password.")
+    return render_template("login.html")
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        username = request.form["username"]
+        password = request.form["password"]
+        users = load_users()
+        if username in users:
+            return render_template("register.html", error="Username already exists.")
+        
+        users[username] = {"password": password, "score": 0}
+        save_users(users)
+        
+        highscores_data = load_highscores()
+        highscores_data["highscores"].append({"username": username, "score": 0})
+        save_highscores(highscores_data)
+
+        session["username"] = username
+        return redirect(url_for("index"))
+    return render_template("register.html")
+
+@app.route("/logout")
+def logout():
+    session.pop("username", None)
+    return redirect(url_for("login"))
+
+@app.route("/update_highscore", methods=["POST"])
+def update_highscore():
+    if "username" not in session:
+        return jsonify({"success": False, "message": "Not logged in"}), 401
+
+    new_score = int(request.json.get("score"))
+    username = session["username"]
+
+    users = load_users()
+    highscores_data = load_highscores()
+
+    if username in users:
+        if new_score > users[username]["score"]:
+            users[username]["score"] = new_score
+            save_users(users)
+
+    found = False
+    for player in highscores_data["highscores"]:
+        if player["username"] == username:
+            if new_score > player["score"]:
+                player["score"] = new_score
+            found = True
+            break
+    if not found:
+        highscores_data["highscores"].append({"username": username, "score": new_score})
+    
+    save_highscores(highscores_data)
+
+    return jsonify({"success": True, "message": "High score updated"})
+
 
 @app.route("/get_score", methods=["GET"])
 def get_score():
@@ -45,3 +132,4 @@ def save_score():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
