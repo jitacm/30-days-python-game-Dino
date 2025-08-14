@@ -37,14 +37,14 @@
 </head>
 <body class="flex flex-col items-center justify-center min-h-screen text-gray-800 relative">
 
-  <h1 class="text-4xl md:text-5xl mb-4 text-green-700 drop-shadow-lg animate-bounce z-0">🦖 Dino Run</h1>
+  <h1 class="text-4xl md:text-5xl mb-4 text-green-700 drop-shadow-lg animate-bounce z-0">🦖Dino Run</h1>
   <canvas id="gameCanvas" class="shadow-2xl border-8 border-green-500"></canvas>
 
   <!-- Start Screen -->
   <div id="startScreen" class="fixed inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center text-center z-10">
     <h2 class="text-3xl md:text-4xl text-white mb-6">Welcome to Dino Run</h2>
     <p class="text-white mb-4">Press SPACE or Tap to Jump</p>
-    <button onclick="startGame()" class="btn bg-green-500 text-white hover:bg-green-600 text-lg">🎮 Start Game</button>
+    <button onclick="startGame()" class="btn bg-green-500 text-white hover:bg-green-600 text-lg">🚀 Start Game</button>
   </div>
 
   <!-- Game Over Screen -->
@@ -60,7 +60,6 @@
   const canvas = document.getElementById("gameCanvas");
   const ctx = canvas.getContext("2d");
 
-  // Fixed game size for consistent play
   const GAME_WIDTH = 800;
   const GAME_HEIGHT = 400;
   canvas.width = GAME_WIDTH;
@@ -85,14 +84,20 @@
       const img = new Image();
       img.src = src;
       img.onload = () => resolve(img);
+      img.onerror = () => {
+        console.error("Failed to load image:", src);
+        // It is crucial to resolve with null to prevent the game from hanging
+        resolve(null);
+      };
     });
   }
 
   async function loadAssets() {
-    images.dino = await loadImage("/static/assets/dino-sprite.png"); // Correct path to sprite sheet
+    // CORRECTED: Changed the file extension from .jpg to .png to match a proper sprite sheet.
+    images.dino = await loadImage("/static/assets/dino-sprite.png");
     images.cactus = await loadImage("/static/assets/cactus-small.png");
     images.cloud = await loadImage("/static/assets/cloud.png");
-    images.ground = await loadImage("/static/assets/ground.png");
+    images.ground = await loadImage("/static/assets/ground.jpg");
     assetsLoaded = true;
   }
 
@@ -100,7 +105,10 @@
     const spriteWidth = 44;
     const spriteHeight = 47;
     const frameX = Math.floor(dino.frame) * spriteWidth;
-    ctx.drawImage(images.dino, frameX, 0, spriteWidth, spriteHeight, dino.x, dino.y, dino.width, dino.height);
+    // Check if the image loaded successfully before drawing
+    if (images.dino) {
+      ctx.drawImage(images.dino, frameX, 0, spriteWidth, spriteHeight, dino.x, dino.y, dino.width, dino.height);
+    }
   }
 
   function gameLoop() {
@@ -130,12 +138,16 @@
     }
     clouds.forEach(cloud => cloud.x -= cloud.speed);
     clouds = clouds.filter(cloud => cloud.x + 90 > 0);
-    clouds.forEach(cloud => ctx.drawImage(images.cloud, cloud.x, cloud.y, 90, 30));
+    if (images.cloud) {
+        clouds.forEach(cloud => ctx.drawImage(images.cloud, cloud.x, cloud.y, 90, 30));
+    }
 
     // Ground
     groundX = (groundX - 5) % GAME_WIDTH;
-    ctx.drawImage(images.ground, groundX, GAME_HEIGHT - GROUND_HEIGHT, GAME_WIDTH, GROUND_HEIGHT);
-    ctx.drawImage(images.ground, groundX + GAME_WIDTH, GAME_HEIGHT - GROUND_HEIGHT, GAME_WIDTH, GROUND_HEIGHT);
+    if (images.ground) {
+        ctx.drawImage(images.ground, groundX, GAME_HEIGHT - GROUND_HEIGHT, GAME_WIDTH, GROUND_HEIGHT);
+        ctx.drawImage(images.ground, groundX + GAME_WIDTH, GAME_HEIGHT - GROUND_HEIGHT, GAME_WIDTH, GROUND_HEIGHT);
+    }
 
     // Cactus
     spawnTimer++;
@@ -150,7 +162,9 @@
     }
     cacti.forEach(cactus => cactus.x -= 5);
     cacti = cacti.filter(cactus => cactus.x + cactus.width > 0);
-    cacti.forEach(cactus => ctx.drawImage(images.cactus, cactus.x, cactus.y, cactus.width, cactus.height));
+    if (images.cactus) {
+        cacti.forEach(cactus => ctx.drawImage(images.cactus, cactus.x, cactus.y, cactus.width, cactus.height));
+    }
 
     // Collision
     cacti.forEach(cactus => {
@@ -181,15 +195,21 @@
     if (!assetsLoaded) {
       await loadAssets();
     }
-    document.getElementById("startScreen").classList.add("hidden");
-    isRunning = true;
-    score = 0;
-    dino.y = GAME_HEIGHT - GROUND_HEIGHT - dino.height;
-    dino.velocityY = 0;
-    cacti = [];
-    clouds = [];
-    spawnTimer = 0;
-    gameLoop();
+    // Only proceed if all assets loaded successfully
+    if (images.dino && images.cactus && images.cloud && images.ground) {
+        document.getElementById("startScreen").classList.add("hidden");
+        isRunning = true;
+        score = 0;
+        dino.y = GAME_HEIGHT - GROUND_HEIGHT - dino.height;
+        dino.velocityY = 0;
+        cacti = [];
+        clouds = [];
+        spawnTimer = 0;
+        gameLoop();
+    } else {
+        console.error("Game cannot start. Missing or failed to load assets.");
+        // A user-friendly alert or message could be added here
+    }
   }
 
   function restartGame() {
