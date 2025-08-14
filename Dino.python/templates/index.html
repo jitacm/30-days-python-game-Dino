@@ -43,6 +43,9 @@
 <body class="flex flex-col items-center justify-center min-h-screen text-gray-800 relative">
 
   <h1 class="text-4xl md:text-5xl mb-4 text-green-700 drop-shadow-lg animate-bounce z-0">🦖 Dino Run</h1>
+  <div class="mb-4 text-lg">
+    High Score: <span id="highScoreDisplay">0</span>
+  </div>
   <canvas id="gameCanvas" class="shadow-2xl border-8 border-green-500"></canvas>
 
   <!-- Start Screen -->
@@ -62,7 +65,6 @@
       <button id="restartBtn" class="btn bg-green-600 text-white hover:bg-green-700 text-lg">🔁 Restart</button>
     </div>
   </div>
-
   <script>
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
@@ -94,22 +96,44 @@
 
     const images = {};
     let assetsLoaded = false;
-    let dinoFrameWidth = 44; // will be updated after loading
+    let dinoFrameWidth = 44;
     let dinoFrameHeight = 47;
     let dinoFrameCount = 1;
+
+    // High score
+    let highScore = 0;
+
+    // Load high score from backend
+    async function loadHighScore() {
+      try {
+        const res = await fetch("/get_score");
+        const data = await res.json();
+        highScore = data.highScore || 0;
+        document.getElementById("highScoreDisplay").textContent = highScore;
+      } catch (err) {
+        console.error("Failed to load high score:", err);
+      }
+    }
+
+    // Save high score to backend
+    async function saveHighScore(score) {
+      try {
+        await fetch("/save_score", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ score })
+        });
+      } catch (err) {
+        console.error("Failed to save high score:", err);
+      }
+    }
 
     function loadImage(src) {
       return new Promise((resolve, reject) => {
         const img = new Image();
         img.src = src;
-        img.onload = () => {
-          console.log(`✅ Loaded: ${src} (${img.width}x${img.height})`);
-          resolve(img);
-        };
-        img.onerror = () => {
-          console.error(`❌ Failed to load image: ${src}`);
-          reject(`Failed to load image: ${src}`);
-        };
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(`Failed to load image: ${src}`);
       });
     }
 
@@ -120,10 +144,9 @@
         images.cloud = await loadImage("static/assets/cloud.png");
         images.ground = await loadImage("static/assets/ground.png");
 
-        // auto-detect dino frame size
+        // Detect sprite frames
         dinoFrameHeight = images.dino.height;
         if (images.dino.width > dinoFrameHeight) {
-          // assume horizontal sprite sheet
           dinoFrameCount = 2; // adjust if you have more
           dinoFrameWidth = images.dino.width / dinoFrameCount;
         } else {
@@ -134,7 +157,6 @@
         dino.width = dinoFrameWidth;
         dino.height = dinoFrameHeight;
 
-        console.log(`🎨 Dino frames: ${dinoFrameCount}, size: ${dinoFrameWidth}x${dinoFrameHeight}`);
         assetsLoaded = true;
       } catch (err) {
         console.error(err);
@@ -143,13 +165,7 @@
 
     function drawDino() {
       const frameX = Math.floor(dino.frame) * dinoFrameWidth;
-      ctx.drawImage(
-        images.dino,
-        frameX, 0,
-        dinoFrameWidth, dinoFrameHeight,
-        dino.x, dino.y,
-        dino.width, dino.height
-      );
+      ctx.drawImage(images.dino, frameX, 0, dinoFrameWidth, dinoFrameHeight, dino.x, dino.y, dino.width, dino.height);
     }
 
     function gameLoop() {
@@ -173,55 +189,49 @@
       }
 
       // Clouds
-      if (Math.random() < 0.01) {
-        clouds.push({ x: GAME_WIDTH, y: Math.random() * GAME_HEIGHT / 2, speed: 0.5 + Math.random() });
-      }
+      if (Math.random() < 0.01) clouds.push({ x: GAME_WIDTH, y: Math.random() * GAME_HEIGHT / 2, speed: 0.5 + Math.random() });
       clouds.forEach(cloud => cloud.x -= cloud.speed);
       clouds = clouds.filter(cloud => cloud.x + 90 > 0);
       clouds.forEach(cloud => ctx.drawImage(images.cloud, cloud.x, cloud.y, 90, 30));
 
-      // Define a baseline for the ground (the Y position where things stand)
       const groundY = GAME_HEIGHT - GROUND_HEIGHT;
 
       // Ground
       groundX = (groundX - 5 + GAME_WIDTH) % GAME_WIDTH;
-      const groundOffset = 30; // adjust this number until it looks right
-
-ctx.drawImage(images.ground, groundX, GAME_HEIGHT - GROUND_HEIGHT - groundOffset, GAME_WIDTH, GROUND_HEIGHT);
-ctx.drawImage(images.ground, groundX - GAME_WIDTH, GAME_HEIGHT - GROUND_HEIGHT - groundOffset, GAME_WIDTH, GROUND_HEIGHT);
-
+      const groundOffset = 30;
+      ctx.drawImage(images.ground, groundX, GAME_HEIGHT - GROUND_HEIGHT - groundOffset, GAME_WIDTH, GROUND_HEIGHT);
+      ctx.drawImage(images.ground, groundX - GAME_WIDTH, GAME_HEIGHT - GROUND_HEIGHT - groundOffset, GAME_WIDTH, GROUND_HEIGHT);
 
       // Cactus
       spawnTimer++;
       if (spawnTimer > 90) {
-        cacti.push({
-          x: GAME_WIDTH,
-          y: groundY - 40, // cactus stands directly on ground
-          width: 30,
-          height: 40
-        });
+        cacti.push({ x: GAME_WIDTH, y: groundY - 40, width: 30, height: 40 });
         spawnTimer = 0;
       }
       cacti.forEach(cactus => cactus.x -= 5);
       cacti = cacti.filter(cactus => cactus.x + cactus.width > 0);
       cacti.forEach(cactus => ctx.drawImage(images.cactus, cactus.x, cactus.y, cactus.width, cactus.height));
 
-      // Collision detection stays the same
-
-
       // Collision detection
+      let gameOver = false;
       cacti.forEach(cactus => {
-        if (
-          dino.x < cactus.x + cactus.width &&
-          dino.x + dino.width > cactus.x &&
-          dino.y < cactus.y + cactus.height &&
-          dino.y + dino.height > cactus.y
-        ) {
-          isRunning = false;
-          document.getElementById("gameOver").classList.remove("hidden");
-          document.getElementById("finalScore").textContent = Math.floor(score);
+        if (dino.x < cactus.x + cactus.width && dino.x + dino.width > cactus.x && dino.y < cactus.y + cactus.height && dino.y + dino.height > cactus.y) {
+          gameOver = true;
         }
       });
+
+      if (gameOver) {
+        isRunning = false;
+        document.getElementById("gameOver").classList.remove("hidden");
+        document.getElementById("finalScore").textContent = Math.floor(score);
+
+        // Update high score
+        if (score > highScore) {
+          highScore = Math.floor(score);
+          document.getElementById("highScoreDisplay").textContent = highScore;
+          saveHighScore(highScore);
+        }
+      }
 
       drawDino();
 
@@ -234,10 +244,9 @@ ctx.drawImage(images.ground, groundX - GAME_WIDTH, GAME_HEIGHT - GROUND_HEIGHT -
       animationId = requestAnimationFrame(gameLoop);
     }
 
+    // Start / Restart / Jump functions remain the same
     async function startGame() {
-      if (!assetsLoaded) {
-        await loadAssets();
-      }
+      if (!assetsLoaded) await loadAssets();
       document.getElementById("startScreen")?.classList.add("hidden");
       document.getElementById("gameOver")?.classList.add("hidden");
       isRunning = true;
@@ -263,9 +272,7 @@ ctx.drawImage(images.ground, groundX - GAME_WIDTH, GAME_HEIGHT - GROUND_HEIGHT -
     }
 
     // Controls
-    window.addEventListener("keydown", e => {
-      if (e.code === "Space") jump();
-    });
+    window.addEventListener("keydown", e => { if (e.code === "Space") jump(); });
     window.addEventListener("touchstart", jump);
 
     // Buttons
@@ -274,7 +281,9 @@ ctx.drawImage(images.ground, groundX - GAME_WIDTH, GAME_HEIGHT - GROUND_HEIGHT -
 
     // Preload
     loadAssets();
+    loadHighScore();
   </script>
+
 
 
 </body>
